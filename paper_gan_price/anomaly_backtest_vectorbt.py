@@ -39,7 +39,7 @@ except ImportError:
 
 # Import GANExpert - Updated import path
 try:
-    from gan_model import GANExpert
+    from paper_gan_price.gan_model import GANExpert
 except ImportError:
     GANExpert = None
 

@@ -8,6 +8,7 @@ import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import torch
 
 import optuna
 from optuna.samplers import TPESampler
@@ -80,7 +81,7 @@ class BaseOptunaOptimizer:
         self.df_train1 = slice_by_date(df_all, "2003-01-01", "2006-12-31")
         self.df_train2 = slice_by_date(df_all, "2010-01-01", "2017-12-31")
         self.df_validation = slice_by_date(df_all, "2007-01-01", "2009-12-31")
-        self.df_test = slice_by_date(df_all, "2021-07-01", "2025-07-31")
+        self.df_test = slice_by_date(df_all, "2018-01-01", "2023-12-31")
 
         features_list = df_all.columns.tolist()
         features_list.remove("Date")
@@ -115,7 +116,6 @@ class BaseOptunaOptimizer:
     def model_eval_loss(self, model, X_val: np.ndarray) -> float:
         """Default evaluator tries TAnoGAN loss, falls back to last g_loss."""
         try:
-            import torch  # local import to avoid hard dependency at import time
             X_val_tensor = torch.FloatTensor(model._preprocess_financial_data(X_val)).to(model.device)  # type: ignore[attr-defined]
             return float(model._evaluate_tanogan_loss(X_val_tensor).mean().item())  # type: ignore[attr-defined]
         except Exception as e:

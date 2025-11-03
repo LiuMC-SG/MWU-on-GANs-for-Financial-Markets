@@ -39,7 +39,7 @@ except ImportError:
 
 # Import GANExpert - Updated import path
 try:
-    from lstm_cnn_gan_model import LSTMCNNGANExpert
+    from lstm_cnn_parallel_price.lstm_cnn_gan_model_parallel import LSTMCNNGANExpert
 except ImportError:
     LSTMCNNGANExpert = None
 
