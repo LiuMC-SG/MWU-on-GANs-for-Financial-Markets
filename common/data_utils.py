@@ -109,3 +109,54 @@ def parse_tickers_arg(tickers: Optional[str], tickers_file: Optional[str]) -> Li
     else:
         raise ValueError("Please provide tickers or a tickers file.")
     return t
+
+def _coerce_date_column(df: pd.DataFrame, col: str = 'date') -> pd.DataFrame:
+    """Coerce date column to datetime with various format handling"""
+    ser = df[col]
+    if np.issubdtype(ser.dtype, np.number):
+        s = ser.astype('int64').abs().median()
+        if s >= 1e15:
+            unit = 'ns'
+        elif s >= 1e12:
+            unit = 'ms'
+        else:
+            unit = 's'
+        df[col] = pd.to_datetime(
+            df[col].astype('int64'), unit=unit, origin='unix', utc=True
+        ).dt.tz_localize(None)
+    else:
+        parsed = pd.to_datetime(ser, errors='coerce', utc=True, infer_datetime_format=True)
+        if parsed.isna().mean() > 0.5:
+            parsed = pd.to_datetime(ser, errors='coerce', utc=True, dayfirst=True)
+        df[col] = parsed.dt.tz_localize(None)
+    return df
+
+def prepare_data(input_file: str, model_type: str) -> pd.DataFrame:
+    """
+    Load and prepare data based on model type
+    
+    Args:
+        input_file: Path to CSV file
+        model_type: Type of model (determines feature selection)
+        
+    Returns:
+        Prepared DataFrame
+    """
+    price_data = pd.read_csv(input_file)
+    price_data = _coerce_date_column(price_data)
+    price_data = price_data.sort_values('date')
+    
+    # Filter columns based on model type
+    if 'price' in model_type:
+        # Price-only models
+        optional_cols = ['log_adj_close']
+        cols_to_keep = ['date', 'adj_close']
+        
+        for col in optional_cols:
+            if col in price_data.columns:
+                cols_to_keep.append(col)
+        
+        price_data = price_data[cols_to_keep]
+    # else: OHLCAV models keep all columns
+    
+    return price_data
