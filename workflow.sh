@@ -2,9 +2,11 @@
 #SBATCH --job-name=gan_master_workflow
 #SBATCH --output=logs/master_%j.out
 #SBATCH --error=logs/master_%j.err
-#SBATCH --time=72:00:00
-#SBATCH --mem=16GB
+#SBATCH --time=3-00:00:00
+#SBATCH --mem=64GB
 #SBATCH --cpus-per-task=4
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:1
 
 ###############################################################################
 # Master Workflow Script for GAN-based Anomaly Detection
@@ -25,7 +27,6 @@
 
 set -e  # Exit on error
 set -u  # Exit on undefined variable
-set -o pipefail  # Catch errors in pipelines
 
 # Parse arguments
 MODEL_TYPE=${1:-paper_gan_price}
@@ -46,13 +47,26 @@ mkdir -p "${LOGS_DIR}"
 echo "========================================"
 echo "GAN Anomaly Detection Workflow"
 echo "========================================"
-echo "Model Type: ${MODEL_TYPE}"
-echo "Output Directory: ${OUTPUT_BASE}"
+echo "Project Root: ${PROJECT_ROOT}"
+echo "Model Type:   ${MODEL_TYPE}"
+echo "Model Dir:    ${PROJECT_ROOT}/${MODEL_DIR}"
+echo "Output Dir:   ${OUTPUT_BASE}"
+echo "Logs Dir:     ${LOGS_DIR}"
 echo "========================================"
 
 # Load conda environment
 VENV="${PROJECT_ROOT}/venv"
 source "${VENV}/bin/activate"
+
+# Ensure we are in the project root so that `-m` imports use FYP as root
+cd "${PROJECT_ROOT}"
+
+# Temporarily extend PYTHONPATH so that imports like `from common import data_utils`
+# and `from paper_gan_price import ...` work correctly.
+export PYTHONPATH="${PROJECT_ROOT}:${PYTHONPATH:-}"
+
+echo "Using PYTHONPATH=${PYTHONPATH}"
+echo "Current directory: $(pwd)"
 
 ###############################################################################
 # STAGE 1: Model Hyperparameter Optimization (Optuna)
@@ -64,7 +78,7 @@ echo "Starting at: $(date)"
 STAGE1_OUTPUT="${OUTPUT_BASE}/stage1_model_optimization"
 mkdir -p "${STAGE1_OUTPUT}"
 
-python -m "${MODEL_DIR}/gan_train_optuna.py" optimize \
+python -m "${MODEL_DIR}.gan_train_optuna" optimize \
     --ticker "${TICKER}" \
     --data-dir "${DATA_DIR}" \
     --out-dir "${STAGE1_OUTPUT}" \
@@ -94,7 +108,7 @@ mkdir -p "${STAGE2_OUTPUT}"
 
 INPUT_FILE="${DATA_DIR}/${TICKER}_backtest.csv"
 
-python -m "${PROJECT_ROOT}/anomaly_backtest_vectorbt.py" \
+python -m "anomaly_backtest_vectorbt" \
     --input "${INPUT_FILE}" \
     --output "${STAGE2_OUTPUT}" \
     --model-path "${STAGE1_OUTPUT}/best_model" \
@@ -134,7 +148,7 @@ echo "Starting at: $(date)"
 STAGE3_OUTPUT="${OUTPUT_BASE}/stage3_final_backtest"
 mkdir -p "${STAGE3_OUTPUT}"
 
-python "${PROJECT_ROOT}/anomaly_backtest_vectorbt.py" \
+python -m "anomaly_backtest_vectorbt" \
     --input "${INPUT_FILE}" \
     --output "${STAGE3_OUTPUT}" \
     --model-path "${STAGE1_OUTPUT}/best_model" \

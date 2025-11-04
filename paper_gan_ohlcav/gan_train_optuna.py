@@ -146,14 +146,14 @@ def train_one_ticker(
     if "log_adj_close" not in df_all.columns:
         raise ValueError("Column 'log_adj_close' missing in input CSV for %s" % ticker)
 
-    # Date windows kept consistent with prior scripts
+    # date windows kept consistent with prior scripts
     df_train1 = slice_by_date(df_all, "2003-01-01", "2006-12-31")
     df_train2 = slice_by_date(df_all, "2010-01-01", "2017-12-31")
     df_test = slice_by_date(df_all, "2018-01-01", "2023-12-31")
     df_validation = slice_by_date(df_all, "2007-01-01", "2009-12-31")
 
     features_list = df_all.columns.tolist()
-    features_list.remove("Date")
+    features_list.remove("date")
 
     X_train1 = make_sequences(df_train1, features_list, sequence_length)
     X_train2 = make_sequences(df_train2, features_list, sequence_length)
@@ -203,10 +203,10 @@ def train_one_ticker(
     if X_test.shape[0] > 0:
         details = model.detect_financial_anomalies(X_test, threshold_percentile=95.0, return_details=True)
         end_indices = df_test.index[sequence_length - 1:]
-        end_dates = df_test.loc[end_indices, "Date"].dt.strftime("%Y-%m-%d").tolist()
+        end_dates = df_test.loc[end_indices, "date"].dt.strftime("%Y-%m-%d").tolist()
         scores = details["anomaly_scores"].tolist()
         labels = details["anomaly_labels"].tolist()
-        end_dates_epoch = df_test.loc[end_indices, "Date"].tolist()
+        end_dates_epoch = df_test.loc[end_indices, "date"].tolist()
 
         out_scores = pd.DataFrame({
             "window_end_date": end_dates[:len(scores)],
@@ -324,24 +324,27 @@ def main(argv: Optional[List[str]] = None) -> None:
         out_dir = _expand(os.path.join(args.out_dir, args.ticker))
         os.makedirs(out_dir, exist_ok=True)
 
-        study = GANOptunaStudy(
-            data_dir=data_dir,
-            ticker=args.ticker,
-            out_dir=out_dir,
-            n_trials=args.n_trials,
-            timeout=args.timeout,
-            n_jobs=args.n_jobs,
-            epoch_unit=args.epoch_unit,
-            string_date_format=args.string_date_format,
-            fix_features_to_log_adj_close=False,
-        )
-        results = study.optimize(study_name=args.study_name)
-        LOG.info("Best value: %s", results["best_value"])
-        LOG.info("Best params: %s", results["best_params"])
+        try:
+            study = GANOptunaStudy(
+                data_dir=data_dir,
+                ticker=args.ticker,
+                out_dir=out_dir,
+                n_trials=args.n_trials,
+                timeout=args.timeout,
+                n_jobs=args.n_jobs,
+                epoch_unit=args.epoch_unit,
+                string_date_format=args.string_date_format,
+                fix_features_to_log_adj_close=False,
+            )
+            results = study.optimize(study_name=args.study_name)
+            LOG.info("Best value: %s", results["best_value"])
+            LOG.info("Best params: %s", results["best_params"])
 
-        if args.train_best:
-            LOG.info("Training best model...")
-            study.train_best_model()
+            if args.train_best:
+                LOG.info("Training best model...")
+                study.train_best_model()
+        except Exception:
+            LOG.exception("Optuna optimization failed for %s", args.ticker)
 
     else:
         ap.print_help()

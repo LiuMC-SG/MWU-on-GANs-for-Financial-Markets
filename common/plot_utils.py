@@ -89,7 +89,7 @@ def save_price_anomaly_plot(
     
     Args:
         out_scores: DataFrame with columns 'score', 'window_end_date_epoch'
-        df_test: DataFrame with columns 'Date', 'log_adj_close'
+        df_test: DataFrame with columns 'date', 'log_adj_close'
         out_png: Output file path
         ticker: Stock ticker for title
     """
@@ -107,7 +107,7 @@ def save_price_anomaly_plot(
     # Plot
     fig, ax = plt.subplots(figsize=(12, 6))
     ax.plot(
-        df_test["Date"], 
+        df_test["date"], 
         df_test["adj_close_normalized"], 
         label="Actual Prices", 
         alpha=0.7
@@ -122,7 +122,7 @@ def save_price_anomaly_plot(
     
     title = f"Price Anomalies - {ticker}" if ticker else "Price Anomalies"
     ax.set_title(title)
-    ax.set_xlabel("Date")
+    ax.set_xlabel("date")
     ax.set_ylabel("Normalized Values")
     ax.legend()
     ax.grid(True, alpha=0.3)

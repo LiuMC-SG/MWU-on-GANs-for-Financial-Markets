@@ -4,6 +4,10 @@ from typing import List, Optional
 
 import numpy as np
 import pandas as pd
+import logging
+
+logging.basicConfig(level=logging.INFO)
+LOG = logging.getLogger(__name__)
 
 def expand_path(p: str) -> str:
     return os.path.abspath(os.path.expandvars(os.path.expanduser(p)))
@@ -23,70 +27,85 @@ def read_ohlc_csv(
     string_date_format: Optional[str] = None,
 ) -> pd.DataFrame:
     """
-    Load OHLCV for `ticker` and return at least columns: Date(datetime64[ns]), and numeric OHLCV fields.
+    Load OHLCV for `ticker` and return at least columns: date(datetime64[ns]), and numeric OHLCV fields.
     Supports epoch timestamps (s/ms, auto-detected) and optional formatted strings via `string_date_format`.
     """
-    data_dir = expand_path(data_dir)
-    candidates = [
-        os.path.join(data_dir, f"{ticker}.csv"),
-        os.path.join(data_dir, f"{ticker.upper()}.csv"),
-        *glob.glob(os.path.join(data_dir, f"*{ticker}*.csv")),
-    ]
-    path = next((c for c in candidates if os.path.isfile(c)), None)
-    if path is None:
-        raise FileNotFoundError(f"CSV for ticker '{ticker}' not found under {data_dir}")
+    try:
+        data_dir = expand_path(data_dir)
+        candidates = [
+            os.path.join(data_dir, f"{ticker}.csv"),
+            os.path.join(data_dir, f"{ticker.upper()}.csv"),
+            *glob.glob(os.path.join(data_dir, f"*{ticker}*.csv")),
+        ]
+        path = next((c for c in candidates if os.path.isfile(c)), None)
+        if path is None:
+            raise FileNotFoundError(f"CSV for ticker '{ticker}' not found under {data_dir}")
 
-    df = pd.read_csv(path)
+        df = pd.read_csv(path)
 
-    date_col = _find_column(df, ["date", "timestamp", "time", "epoch", "unix", "ts"]) or "Date"
-    if date_col not in df.columns:
-        raise ValueError("No date/timestamp column found in CSV.")
+        date_col = _find_column(df, ["date", "timestamp", "time", "epoch", "unix", "ts"]) or "date"
+        if date_col not in df.columns:
+            raise ValueError("No date/timestamp column found in CSV.")
 
-    # numeric epochs first
-    raw = df[date_col]
-    s = pd.to_numeric(raw, errors="coerce").astype("float64")
-    s[~np.isfinite(s)] = np.nan
-    mask_num = s.notna()
+        # numeric epochs first
+        raw = df[date_col]
+        s = pd.to_numeric(raw, errors="coerce").astype("float64")
+        s[~np.isfinite(s)] = np.nan
+        mask_num = s.notna()
 
-    if epoch_unit not in {"auto", "s", "ms"}:
-        raise ValueError("epoch_unit must be one of {'auto','s','ms'}")
+        if epoch_unit not in {"auto", "s", "ms"}:
+            raise ValueError("epoch_unit must be one of {'auto','s','ms'}")
 
-    if epoch_unit == "auto":
-        unit = "ms" if mask_num.any() and float(s[mask_num].median()) > 1e11 else "s"
-    else:
-        unit = epoch_unit
+        if epoch_unit == "auto":
+            unit = "ms" if mask_num.any() and float(s[mask_num].median()) > 1e11 else "s"
+        else:
+            unit = epoch_unit
 
-    dt = pd.Series(pd.NaT, index=df.index, dtype="datetime64[ns]")
-    if mask_num.any():
-        dt.loc[mask_num] = pd.to_datetime(s.loc[mask_num], unit=unit, utc=True).dt.tz_convert(None)
+        dt = pd.Series(pd.NaT, index=df.index, dtype="datetime64[ns]")
+        if mask_num.any():
+            dt.loc[mask_num] = pd.to_datetime(s.loc[mask_num], unit=unit, utc=True).dt.tz_convert(None)
 
-    # fallback to formatted strings if provided
-    mask_str = ~mask_num
-    if string_date_format and mask_str.any():
-        dt2 = pd.to_datetime(
-            raw.loc[mask_str],
-            format=string_date_format,
-            errors="coerce",
-            utc=True,
-        )
-        dt.loc[mask_str] = dt2.dt.tz_convert(None)
+        # fallback to formatted strings if provided
+        mask_str = ~mask_num
+        if string_date_format and mask_str.any():
+            dt2 = pd.to_datetime(
+                raw.loc[mask_str],
+                format=string_date_format,
+                errors="coerce",
+                utc=True,
+            )
+            dt.loc[mask_str] = dt2.dt.tz_convert(None)
 
-    good = dt.notna()
-    df = df.loc[good].copy()
-    df["Date"] = dt.loc[good].astype("datetime64[ns]")
+        good = dt.notna()
 
-    # coerce other columns numeric
-    for col in df.columns:
-        if col != "Date":
-            df[col] = pd.to_numeric(df[col], errors="coerce")
+        if not good.any():
+            hint = " Provide --string-date-format if your file mixes epoch and formatted strings." \
+                if string_date_format is None else ""
+        else:
+            hint = ""
 
-    out = df.dropna().sort_values("Date").reset_index(drop=True)
-    return out
+        if (~good).sum() > 0:
+            LOG.warning("%s: Dropping %d row(s) with unparseable timestamps in '%s'.%s",
+                        os.path.basename(path), int((~good).sum()), date_col, hint)
+
+        df = df.loc[good].copy()
+        df["date"] = dt.loc[good].astype("datetime64[ns]")
+
+        # coerce other columns numeric
+        for col in df.columns:
+            if col != "date":
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        out = df.dropna().sort_values("date").reset_index(drop=True)
+        return out
+    except Exception as e:
+        LOG.error(f"Error reading CSV for ticker '{ticker}': {e}")
+        raise
 
 def slice_by_date(df: pd.DataFrame, start: str, end: str) -> pd.DataFrame:
     start_dt = pd.to_datetime(start)
     end_dt = pd.to_datetime(end)
-    m = (df["Date"] >= start_dt) & (df["Date"] <= end_dt)
+    m = (df["date"] >= start_dt) & (df["date"] <= end_dt)
     return df.loc[m].reset_index(drop=True)
 
 def make_sequences(df: pd.DataFrame, features: List[str], seq_len: int) -> np.ndarray:

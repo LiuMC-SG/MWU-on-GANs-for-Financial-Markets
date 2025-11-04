@@ -294,7 +294,7 @@ class VectorBTBacktester:
         """Filter data based on configured start and end dates (YYYY-MM-DD), inclusive"""
         df = data.copy()
 
-        # Ensure Date is datetime64[ns]
+        # Ensure date is datetime64[ns]
         df = self._coerce_date_column(df, 'date')
 
         # Remove timezone to avoid comparison surprises
@@ -614,7 +614,7 @@ class VectorBTBacktester:
         
         # Save daily data as CSV for analysis
         daily_df = pd.DataFrame({
-            'Date': results['dates'],
+            'date': results['dates'],
             'Price': results['prices'],
             'Anomaly_Score': results['anomaly_scores'],
             'Anomaly_Signal': results['anomaly_signals'],
@@ -670,8 +670,8 @@ class VectorBTBacktester:
                 daily_returns = _reorder(daily_returns)
 
             # Common date formatting
-            locator = mdates.AutoDateLocator()
-            formatter = mdates.ConciseDateFormatter(locator)
+            locator = mdates.AutodateLocator()
+            formatter = mdates.ConcisedateFormatter(locator)
 
             # Plot 1: Price with anomaly periods
             ax1 = axes[0]
@@ -818,7 +818,7 @@ class VectorBTBacktester:
 
                 ax5.set_title('Portfolio Drawdown', fontsize=14, fontweight='bold')
                 ax5.set_ylabel('Drawdown (%)')
-                ax5.set_xlabel('Date')
+                ax5.set_xlabel('date')
                 ax5.grid(True, alpha=0.3)
                 ax5.xaxis.set_major_locator(locator)
                 ax5.xaxis.set_major_formatter(formatter)

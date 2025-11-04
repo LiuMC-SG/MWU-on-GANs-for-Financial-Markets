@@ -75,7 +75,7 @@ class BaseOptunaOptimizer:
             # Match the single-feature usage in existing code paths
             if "log_adj_close" not in df_all.columns:
                 raise ValueError("Column 'log_adj_close' is missing in the input CSV.")
-            df_all = df_all[["Date", "log_adj_close"]]
+            df_all = df_all[["date", "log_adj_close"]]
 
         # Train/val/test windows copied from project convention
         self.df_train1 = slice_by_date(df_all, "2003-01-01", "2006-12-31")
@@ -84,7 +84,7 @@ class BaseOptunaOptimizer:
         self.df_test = slice_by_date(df_all, "2018-01-01", "2023-12-31")
 
         features_list = df_all.columns.tolist()
-        features_list.remove("Date")
+        features_list.remove("date")
         self.features_list = features_list
 
         LOG.info(
@@ -126,28 +126,43 @@ class BaseOptunaOptimizer:
 
     # ---------- objective & optimization ----------
     def objective(self, trial: optuna.Trial) -> float:
-        params = self.sample_hparams(trial)
-        seq_len = params["sequence_length"]
-        X_train, X_val = self._create_sequences(seq_len)
+        try:
+            params = self.sample_hparams(trial)
+            seq_len = params["sequence_length"]
+            X_train, X_val = self._create_sequences(seq_len)
 
-        trial_dir = os.path.join(self.out_dir, f"trial_{trial.number}")
-        os.makedirs(trial_dir, exist_ok=True)
+            trial_dir = os.path.join(self.out_dir, f"trial_{trial.number}")
+            os.makedirs(trial_dir, exist_ok=True)
 
-        model = self.build_model(params, trial_dir)
+            model = self.build_model(params, trial_dir)
 
-        LOG.info("Trial %d params: %s", trial.number, {k: (round(v, 4) if isinstance(v, float) else v) for k, v in params.items()})
-        model.fit(X_train=X_train, X_val=X_val, verbose=0, log_every=100)  # project convention
+            LOG.info("Trial %d params: %s", trial.number, {k: (round(v, 4) if isinstance(v, float) else v) for k, v in params.items()})
+            model.fit(X_train=X_train, X_val=X_val, verbose=0, log_every=100)  # project convention
 
-        val_loss = self.model_eval_loss(model, X_val)
+            val_loss = self.model_eval_loss(model, X_val)
 
-        # Persist typical artifacts
-        save_json({"trial_number": trial.number, "params": params, "validation_loss": val_loss,
-                   "training_history": getattr(model, "training_history", {})},
-                  os.path.join(trial_dir, "trial_results.json"))
-        save_training_plot(getattr(model, "training_history", {}),
-                           os.path.join(trial_dir, "training_history.png"))
+            # Intermediate reporting for pruning
+            trial.report(val_loss, step=params["epochs"])
+                
+            # Check if trial should be pruned
+            if trial.should_prune():
+                raise optuna.TrialPruned()
 
-        return float(val_loss)
+            # Persist typical artifacts
+            save_json({"trial_number": trial.number, "params": params, "validation_loss": val_loss,
+                    "training_history": getattr(model, "training_history", {})},
+                    os.path.join(trial_dir, "trial_results.json"))
+            save_training_plot(getattr(model, "training_history", {}),
+                            os.path.join(trial_dir, "training_history.png"))
+
+            return float(val_loss)
+        except optuna.TrialPruned:
+            LOG.info(f"Trial {trial.number} was pruned")
+            raise
+        except Exception as e:
+            LOG.error(f"Trial {trial.number} failed: {e}")
+            # Return a large penalty value instead of failing completely
+            return float('inf')
 
     def optimize(self, study_name: Optional[str] = None) -> Dict[str, Any]:
         storage = None  # file / RDB storage can be added later
@@ -157,9 +172,9 @@ class BaseOptunaOptimizer:
             sampler=TPESampler(seed=42),
             pruner=MedianPruner(n_startup_trials=5, n_warmup_steps=0),
             storage=storage,
-            load_if_exists=False,
+            load_if_exists=True,
         )
-        study.optimize(self.objective, n_trials=self.n_trials, timeout=self.timeout, n_jobs=self.n_jobs)
+        study.optimize(self.objective, n_trials=self.n_trials, timeout=self.timeout, n_jobs=self.n_jobs, show_progress_bar=True)
 
         self.best_params = dict(study.best_trial.params)
         self.best_value = float(study.best_value)
@@ -175,6 +190,9 @@ class BaseOptunaOptimizer:
             "best_params": self.best_params,
         }
         save_json(results, os.path.join(self.out_dir, "study_summary.json"))
+        
+        self._generate_optimization_plots(study)
+        
         return results
 
     # ---------- best-model training & visualization ----------
@@ -193,14 +211,49 @@ class BaseOptunaOptimizer:
 
         fig, ax = plt.subplots(figsize=(12, 6))
         if "adj_close_normalized" in df_test:
-            ax.plot(df_test["Date"], df_test["adj_close_normalized"], label="Actual Prices", alpha=0.7)
+            ax.plot(df_test["date"], df_test["adj_close_normalized"], label="Actual Prices", alpha=0.7)
         ax.plot(out_scores["window_end_date_epoch"], out_scores["score_normalized"], label="Anomaly Scores", alpha=0.8)
         ax.set_title(f"Price Anomalies - {self.ticker}")
-        ax.set_xlabel("Date"); ax.set_ylabel("Normalized Values")
+        ax.set_xlabel("date"); ax.set_ylabel("Normalized Values")
         ax.legend(); ax.grid(True, alpha=0.3)
         plt.tight_layout()
         fig.savefig(out_png, bbox_inches="tight", dpi=150)
         plt.close(fig)
+
+    def _generate_optimization_plots(self, study: optuna.Study):
+        """Generate optimization visualization plots."""
+        try:
+            # Optimization history
+            fig = optuna.visualization.matplotlib.plot_optimization_history(study)
+            fig.savefig(os.path.join(self.out_dir, 'optimization_history.png'), dpi=150, bbox_inches='tight')
+            plt.close(fig)
+            
+            # Parameter importances
+            try:
+                fig = optuna.visualization.matplotlib.plot_param_importances(study)
+                fig.savefig(os.path.join(self.out_dir, 'param_importances.png'), dpi=150, bbox_inches='tight')
+                plt.close(fig)
+            except Exception as e:
+                LOG.warning(f"Could not generate parameter importance plot: {e}")
+            
+            # Parallel coordinate plot
+            try:
+                fig = optuna.visualization.matplotlib.plot_parallel_coordinate(study)
+                fig.savefig(os.path.join(self.out_dir, 'parallel_coordinate.png'), dpi=150, bbox_inches='tight')
+                plt.close(fig)
+            except Exception as e:
+                LOG.warning(f"Could not generate parallel coordinate plot: {e}")
+            
+            # Slice plot
+            try:
+                fig = optuna.visualization.matplotlib.plot_slice(study)
+                fig.savefig(os.path.join(self.out_dir, 'slice_plot.png'), dpi=150, bbox_inches='tight')
+                plt.close(fig)
+            except Exception as e:
+                LOG.warning(f"Could not generate slice plot: {e}")
+                
+        except Exception as e:
+            LOG.warning(f"Error generating optimization plots: {e}")
 
     def train_best_model(self):
         if not self.best_params:
@@ -225,8 +278,8 @@ class BaseOptunaOptimizer:
         if X_test.shape[0] > 0 and hasattr(model, "detect_financial_anomalies"):
             details = model.detect_financial_anomalies(X_test, threshold_percentile=95.0, return_details=True)
             end_indices = self.df_test.index[seq_len - 1:]
-            end_dates = self.df_test.loc[end_indices, "Date"].dt.strftime("%Y-%m-%d").tolist()
-            end_dates_epoch = self.df_test.loc[end_indices, "Date"].tolist()
+            end_dates = self.df_test.loc[end_indices, "date"].dt.strftime("%Y-%m-%d").tolist()
+            end_dates_epoch = self.df_test.loc[end_indices, "date"].tolist()
 
             out_scores = pd.DataFrame({
                 "window_end_date": end_dates[: len(details["anomaly_scores"])],
