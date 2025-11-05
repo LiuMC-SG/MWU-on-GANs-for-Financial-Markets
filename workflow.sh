@@ -88,13 +88,13 @@ python -m "${MODEL_DIR}.gan_train_optuna" optimize \
     2>&1 | tee "${LOGS_DIR}/stage1_optuna.log"
 
 # Check if stage 1 completed successfully
-if [ ! -f "${STAGE1_OUTPUT}/${TICKER}/best_model/best_params.json" ]; then
+if [ ! -f "${STAGE1_OUTPUT}/best_model/best_params.json" ]; then
     echo "Error: Stage 1 did not produce best_params.json"
     exit 1
 fi
 
 echo "Stage 1 completed at: $(date)"
-echo "Model saved to: ${STAGE1_OUTPUT}/${TICKER}/best_model"
+echo "Model saved to: ${STAGE1_OUTPUT}/best_model"
 
 ###############################################################################
 # STAGE 2: Trading Signal Hyperparameter Optimization
@@ -111,7 +111,7 @@ INPUT_FILE="${DATA_DIR}/${TICKER}_backtest.csv"
 python -m "anomaly_backtest_vectorbt" \
     --input "${INPUT_FILE}" \
     --output "${STAGE2_OUTPUT}" \
-    --model-path "${STAGE1_OUTPUT}/${TICKER}/best_model" \
+    --model-path "${STAGE1_OUTPUT}/best_model" \
     --model-type "${MODEL_TYPE}" \
     --optimize \
     --n-trials 10 \

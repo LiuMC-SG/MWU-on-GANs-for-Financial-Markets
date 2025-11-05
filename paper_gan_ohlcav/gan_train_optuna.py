@@ -321,7 +321,7 @@ def main(argv: Optional[List[str]] = None) -> None:
 
     elif args.mode == "optimize":
         data_dir = _expand(args.data_dir)
-        out_dir = _expand(os.path.join(args.out_dir, args.ticker))
+        out_dir = _expand(args.out_dir)
         os.makedirs(out_dir, exist_ok=True)
 
         try:
