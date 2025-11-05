@@ -37,25 +37,25 @@ from hedge_algorithm_python import (
 def load_experts_and_weights(args, logger):
     """Load expert models based on provided paths."""
     try:
-        from gan_model import GANExpert
+        from ..paper_gan_ohlcav.gan_model import GANExpert
     except ImportError:
         GANExpert = None
         logger.warning("GANExpert class not found. Ensure gan_model.py is available.")
 
     try:
-        from lstm_cnn_gan_model import LSTMCNNGANExpert
+        from ..lstm_cnn_parallel_ohlcav.lstm_cnn_gan_model_parallel import LSTMCNNGANExpert
     except ImportError:
         LSTMCNNGANExpert = None
         logger.warning("LSTMCNNGANExpert class not found. Ensure lstm_cnn_gan_model.py is available.")
 
     try:
-        from lstm_cnn_gan_model_sequential import LSTMCNNGANExpert as LSTMCNNGANSeqExpert
+        from ..lstm_cnn_seq_ohlcav.lstm_cnn_gan_model_sequential import LSTMCNNGANExpert as LSTMCNNGANSeqExpert
     except ImportError:
         LSTMCNNGANSeqExpert = None
         logger.warning("LSTMCNNGANSeqExpert class not found. Ensure lstm_cnn_gan_model_sequential.py is available.")
 
     try:
-        from cnn_lstm_gan_model_sequential import LSTMCNNGANExpert as CNNSLSTMGANSeqExpert
+        from ..cnn_lstm_seq_ohlcav.cnn_lstm_gan_model_sequential import LSTMCNNGANExpert as CNNSLSTMGANSeqExpert
     except ImportError:
         CNNSLSTMGANSeqExpert = None
         logger.warning("CNNSLSTMGANSeqExpert class not found. Ensure cnn_lstm_gan_model_sequential.py is available.")

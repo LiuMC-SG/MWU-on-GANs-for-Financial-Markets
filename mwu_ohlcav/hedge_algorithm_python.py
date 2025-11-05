@@ -15,22 +15,22 @@ import torch
 warnings.filterwarnings('ignore')
 
 try:
-    from gan_model import GANExpert
+    from ..paper_gan_ohlcav.gan_model import GANExpert
 except ImportError:
     GANExpert = None
 
 try:
-    from lstm_cnn_gan_model import LSTMCNNGANExpert
+    from ..lstm_cnn_parallel_ohlcav.lstm_cnn_gan_model_parallel import LSTMCNNGANExpert
 except ImportError:
     LSTMCNNGANExpert = None
 
 try:
-    from lstm_cnn_gan_model_sequential import LSTMCNNGANExpert as LSTMCNNGANSeqExpert
+    from ..lstm_cnn_seq_ohlcav.lstm_cnn_gan_model_sequential import LSTMCNNGANExpert as LSTMCNNGANSeqExpert
 except ImportError:
     LSTMCNNGANSeqExpert = None
 
 try:
-    from cnn_lstm_gan_model_sequential import LSTMCNNGANExpert as CNNSLSTMGANSeqExpert
+    from ..cnn_lstm_seq_ohlcav.cnn_lstm_gan_model_sequential import LSTMCNNGANExpert as CNNSLSTMGANSeqExpert
 except ImportError:
     CNNSLSTMGANSeqExpert = None
 
