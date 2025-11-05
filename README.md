@@ -119,15 +119,15 @@ Prepare your financial data as CSV files with the following columns:
 
 **For OHLCAV models:**
 - `date`: Timestamp
-- `open`, `high`, `low`, `close`, `adj_close`, `volume`
-- `log_adj_close`: Log-transformed adjusted close
+- `log_open`, `log_high`, `log_low`, `log_close`, `log_adj_close`, `log_volume`: Log-transformed OHLCAV
+- `adj_close`: Adjusted close price
 
 ### 2. Training Individual GAN Models
 
 #### Train with default parameters:
 ```bash
 python -m paper_gan_price.gan_train_optuna train \
-    --tickers AAPL \
+    --tickers SP500 \
     --data-dir ~/Data/OHLC \
     --out-dir ./runs
 ```
@@ -135,7 +135,7 @@ python -m paper_gan_price.gan_train_optuna train \
 #### Hyperparameter optimization:
 ```bash
 python -m paper_gan_price.gan_train_optuna optimize \
-    --ticker AAPL \
+    --ticker SP500 \
     --data-dir ~/Data/OHLC \
     --out-dir ./optuna_results \
     --n-trials 50 \
@@ -149,7 +149,7 @@ Test a single GAN model's anomaly detection trading strategy:
 
 ```bash
 python anomaly_backtest_vectorbt.py \
-    --input data/AAPL_backtest.csv \
+    --input data/SP500_backtest.csv \
     --output ./results \
     --model-path ./models/paper_gan_price \
     --model-type paper_gan_price \
@@ -162,7 +162,7 @@ python anomaly_backtest_vectorbt.py \
 #### With optimization:
 ```bash
 python anomaly_backtest_vectorbt.py \
-    --input data/AAPL_backtest.csv \
+    --input data/SP500_backtest.csv \
     --output ./results \
     --model-path ./models/paper_gan_price \
     --model-type paper_gan_price \
@@ -178,7 +178,7 @@ Combine multiple GAN experts using the MWU algorithm:
 
 ```bash
 python -m mwu_price.hedge_algorithm_python \
-    --input data/AAPL_backtest.csv \
+    --input data/SP500_backtest.csv \
     --output ./mwu_results \
     --paper-gan-model models/paper_gan_price \
     --lstm-cnn-gan-model models/lstm_cnn_parallel_price \
@@ -192,7 +192,7 @@ python -m mwu_price.hedge_algorithm_python \
 #### MWU hyperparameter tuning:
 ```bash
 python -m mwu_price.hedge_algorithm_optuna \
-    --input data/AAPL_backtest.csv \
+    --input data/SP500_backtest.csv \
     --output ./mwu_optuna \
     --paper-gan-model models/paper_gan_price \
     --lstm-cnn-gan-model models/lstm_cnn_parallel_price \
